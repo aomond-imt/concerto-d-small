@@ -5,13 +5,13 @@ from concerto_d.comp_types import *
 
 
 async def main():
-    add_comp(server)
-    add_comp(client)
+    add_comp("server", server)
+    add_comp("client", client)
     await asyncio.gather(
-        push_b(bhv_num=0, comp_num=0),
-        push_b(bhv_num=0, comp_num=1),
-        # push_b(bhv_num=1, comp_num=0),
-        # push_b(bhv_num=1, comp_num=1)
+        # push_b(bhv_num=0, comp_name="server"),
+        # push_b(bhv_num=0, comp_name="client"),
+        push_b(bhv_num=1, comp_name="server"),
+        push_b(bhv_num=1, comp_name="client")
     )
 
 
@@ -19,14 +19,14 @@ if __name__ == '__main__':
     name = "server_client"
     load_state(name)
     state = concerto_d.commands.state
-    print("server", state["comps"][0][1] if len(state["comps"]) > 0 else [])
-    print("client", state["comps"][1][1] if len(state["comps"]) > 0 else [])
-    print("using_deps", state["using_deps"])
+    print("server", state["comps"]["server"][1] if len(state["comps"]) > 0 else [])
+    print("client", state["comps"]["client"][1] if len(state["comps"]) > 0 else [])
+    print("deps", state["deps"])
     concerto_d.comp_types.ti = time.time()
     asyncio.run(main())
-    print("server", state["comps"][0][1])
-    print("client", state["comps"][1][1])
-    print("using_deps", state["using_deps"])
+    print("server", state["comps"]["server"][1])
+    print("client", state["comps"]["client"][1])
+    print("deps", state["deps"])
     mem_state(name)
 
 
