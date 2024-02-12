@@ -16,7 +16,8 @@ async def main():
 
 
 if __name__ == '__main__':
-    load_state()
+    name = "server_client"
+    load_state(name)
     state = concerto_d.commands.state
     print("server", state["comps"][0][1] if len(state["comps"]) > 0 else [])
     print("client", state["comps"][1][1] if len(state["comps"]) > 0 else [])
@@ -26,10 +27,11 @@ if __name__ == '__main__':
     print("server", state["comps"][0][1])
     print("client", state["comps"][1][1])
     print("using_deps", state["using_deps"])
-    mem_state()
+    mem_state(name)
 
 
 # TODO Checkpoint system for rollback?
 # TODO Token granularity
 # TODO connect prevents any non-connected port to use/provide a service
 # TODO prevent incorrect reconf (unreachability, cyclic)
+# TODO do a dry run and see what can be achieved or not
