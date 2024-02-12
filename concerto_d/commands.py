@@ -1,9 +1,11 @@
 # Asyncio synchronizations
 import asyncio
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 
-from concerto_d import comp_types
+from concerto_d import comp_types, communications
+from concerto_d.communications import push_events_to_peers
 
 
 def mem_state(name):
@@ -17,7 +19,7 @@ def load_state(name):
         with open(f"/tmp/state_{name}") as f:
             state = json.load(f)
     except FileNotFoundError:
-        state = {"comps": [], "deps": [], "using_deps": {}, "events": []}
+        state = {"comps": [], "provide_deps": [], "using_deps": {}, "events": []}
 
 
 state = {}
@@ -62,6 +64,7 @@ async def push_b(bhv_num, comp_num):
                 dep = c_p.replace("provide_", "").replace("use_", "")
                 while len(state["using_deps"][dep]) > 0:
                     await dependencies_to_wait.setdefault((dep, state["using_deps"][dep][0]), asyncio.Event()).wait()
+                push_events_to_peers([c_p, 0, time.time(), None])  # Deactive provide
 
         # Start transitions
         ths = []
@@ -75,6 +78,7 @@ async def push_b(bhv_num, comp_num):
                 state["using_deps"][dep].remove(comp_num)
                 if (dep, comp_num) in dependencies_to_wait.keys():
                     dependencies_to_wait[(dep, comp_num)].set()
+                push_events_to_peers([c_p, None, time.time(), None])  # Deactivate use
 
         # Wait for required transitions (target place docks)
         for t_name, th in ths:
@@ -87,13 +91,14 @@ async def push_b(bhv_num, comp_num):
 
             # Provide port activation
             if "provide" in p:
-                if dep not in state["deps"]:
-                    state["deps"].append(dep)
+                if dep not in state["provide_deps"]:
+                    state["provide_deps"].append(dep)
                     if dep in dependencies_to_wait.keys():
                         dependencies_to_wait[dep].set()
+                    push_events_to_peers([p, 1, time.time(), "dummy"])  # Activate provide
             else:
                 # Wait for provide port activation
-                if dep not in state["deps"]:
+                if dep not in state["provide_deps"]:
                     await dependencies_to_wait.setdefault(dep, asyncio.Event()).wait()
 
                 # Start using provide port
@@ -102,5 +107,6 @@ async def push_b(bhv_num, comp_num):
                 else:
                     if comp_num not in state["using_deps"][dep]:
                         state["using_deps"][dep].append(comp_num)
+                push_events_to_peers([p, f"provide_{dep}", time.time(), None])  # Activate use
         state["comps"][comp_num][1] = target_place
     pushb_locks[comp_num].release()

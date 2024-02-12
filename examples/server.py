@@ -1,6 +1,7 @@
 import asyncio
 import concerto_d.comp_types
 from concerto_d.commands import add_comp, push_b, load_state, mem_state
+from concerto_d.communications import pull_events_from_peers
 from concerto_d.comp_types import *
 
 
@@ -15,6 +16,7 @@ if __name__ == '__main__':
     name = "server"
     load_state(name)
     state = concerto_d.commands.state
+    events = pull_events_from_peers(state)
     print("server", state["comps"][0][1] if len(state["comps"]) > 0 else [])
     print("using_deps", state["using_deps"])
     concerto_d.comp_types.ti = time.time()
