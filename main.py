@@ -1,7 +1,8 @@
+import asyncio
 import json
 import threading
 import time
-from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 
 
 def print_t(msg):
@@ -28,8 +29,8 @@ comp_type_0 = [
 ]
 
 # Server
-def install(): time.sleep(1); print_t("install")
-def execute(): time.sleep(1); print_t("execute")
+def install(): time.sleep(5); print_t("install")
+def execute(): time.sleep(2); print_t("execute")
 def upd1(): time.sleep(1); print_t("upd1")
 def upd2(): time.sleep(1); print_t("upd2")
 ps1 = (1, ["provide_ip"])
@@ -43,13 +44,13 @@ server = [
 def installc(): time.sleep(1); print_t("installc")
 def biginstallc(): time.sleep(3); print_t("biginstallc")
 def configc(): time.sleep(1); print_t("configc")
-def runc(): time.sleep(1); print_t("runc")
+def runc(): time.sleep(2); print_t("runc")
 def upd1c(): time.sleep(3); print_t("upd1c")
 def upd2c(): time.sleep(3); print_t("upd2c")
 pc1 = (1, ["use_ip"])
 pc2 = (2, ["use_ip"])
-pc3 = (3, ["use_ip", "use_service"])
-pc4 = (4, ["use_ip", "use_service"])
+pc3 = (3, ["use_ip", "use_srv"])
+pc4 = (4, ["use_ip", "use_srv"])
 client = [
     (p0, [(["installc", "biginstallc"], pc1, ["installc"]), (["configc"], pc2, ["configc", "biginstallc"]), (["runc"], pc3, ["runc"])]),
     (pc3, [(["upd1c"], pc4, ["upd1c"]), (["upd2c"], pc2, ["upd2c"])])
@@ -73,56 +74,56 @@ def del_comp(comp):
             break
 
 
+async def wait_dep(dependencies_to_wait, d):
+    await dependencies_to_wait[d.replace("use", "provide")].wait()
+
+
 locks = [threading.Lock(), threading.Lock()]
-def execute_push_b(bhv_num, comp_num):
+async def push_b(dependencies_to_wait, bhv_num, comp_num):
     locks[comp_num].acquire()
+    loop = asyncio.get_running_loop()
     current_p = state[comp_num][1]
     start_p, steps = state[comp_num][0][bhv_num]
-    threads = []
     current_step_i = 0
     if current_p != start_p:
         for i in range(len(steps)):
             if steps[i][1] == current_p:
-                if i+1 < len(steps):
-                    current_step_i = i+1
+                if i + 1 < len(steps):
+                    current_step_i = i + 1
                 else:
                     return
-
+    executor = ThreadPoolExecutor(max_workers=10)
     for i in range(current_step_i, len(steps)):
+        ths = []
         for t in steps[i][0]:
-            th = Thread(target=globals()[t])
-            th.start()
-            threads.append((t, th))
+            ths.append((t, loop.run_in_executor(executor, globals()[t])))
 
-        for t_name, th in threads:
+        for t_name, th in ths:
             if t_name in steps[i][2]:
-                th.join()
+                print(f"awaiting {t_name}")
+                await th
+        ports = steps[i][1][1]
+        for p in ports:
+            if "provide" in p:
+                print(f"print set {p}")
+                dependencies_to_wait[p].set()
+            else:
+                await wait_dep(dependencies_to_wait, p)
         state[comp_num][1] = steps[i][1]
     locks[comp_num].release()
 
 
-def push_b(bhv_num, comp_num):
-    t = Thread(target=execute_push_b, args=(bhv_num, comp_num))
-    t.start()
-    push_b_threads.append((comp_num, t))
-
-
-def main1():
-    add_comp(comp_type_0)
-    push_b(0, 0)
-    for _, t in push_b_threads:
-        t.join()
-
-
-def main2():
+async def main():
+    dependencies_to_wait = {
+        "provide_ip": asyncio.Event(),
+        "provide_srv": asyncio.Event(),
+    }
     add_comp(server)
     add_comp(client)
-    push_b(bhv_num=0, comp_num=0)
-    push_b(bhv_num=1, comp_num=0)
-    push_b(bhv_num=0, comp_num=1)
-    push_b(bhv_num=1, comp_num=1)
-    for _, t in push_b_threads:
-        t.join()
+    await asyncio.gather(
+        push_b(dependencies_to_wait, bhv_num=0, comp_num=0),
+        push_b(dependencies_to_wait, bhv_num=0, comp_num=1)
+    )
 
 
 def mem_state():
@@ -145,7 +146,7 @@ if __name__ == '__main__':
     print("client", state[1][1] if len(state) > 0 else [])
     global ti
     ti = time.time()
-    main2()
+    asyncio.run(main())
     print("server", state[0][1])
     print("client", state[1][1])
     mem_state()
