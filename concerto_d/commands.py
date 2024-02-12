@@ -6,15 +6,15 @@ from concurrent.futures import ThreadPoolExecutor
 from concerto_d import comp_types
 
 
-def mem_state():
-    with open("/tmp/state_cdpico", "w") as f:
+def mem_state(name):
+    with open(f"/tmp/state_{name}", "w") as f:
         json.dump(state, f)
 
 
-def load_state():
+def load_state(name):
     global state
     try:
-        with open("/tmp/state_cdpico") as f:
+        with open(f"/tmp/state_{name}") as f:
             state = json.load(f)
     except FileNotFoundError:
         state = {"comps": [], "deps": [], "using_deps": {}, "events": []}
