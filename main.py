@@ -1,7 +1,6 @@
 import asyncio
 import json
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 
 import comp_types
@@ -12,13 +11,15 @@ comps_instances = []
 state = {"comps": [], "deps": []}
 push_b_threads = []
 dependencies_to_wait = {
-    "provide_ip": asyncio.Event(),
-    "provide_srv": asyncio.Event(),
+    "ip": asyncio.Event(),
+    "srv": asyncio.Event(),
 }
+pushb_locks = []
 
 
 def add_comp(comp):
     state["comps"].append([comp, (0, [])])
+    pushb_locks.append(asyncio.Lock())
 
 
 def del_comp(comp):
@@ -28,13 +29,8 @@ def del_comp(comp):
             break
 
 
-async def wait_dep(dependencies_to_wait, d):
-    await dependencies_to_wait[d.replace("use", "provide")].wait()
-
-
-locks = [threading.Lock(), threading.Lock()]
 async def push_b(dependencies_to_wait, bhv_num, comp_num):
-    locks[comp_num].acquire()
+    await pushb_locks[comp_num].acquire()
     loop = asyncio.get_running_loop()
     current_p = state["comps"][comp_num][1]
     start_p, steps = state["comps"][comp_num][0][bhv_num]
@@ -54,17 +50,20 @@ async def push_b(dependencies_to_wait, bhv_num, comp_num):
 
         for t_name, th in ths:
             if t_name in steps[i][2]:
-                print(f"awaiting {t_name}")
                 await th
         ports = steps[i][1][1]
         for p in ports:
+            dep = p.replace("provide_", "").replace("use_", "")
             if "provide" in p:
-                print(f"print set {p}")
-                dependencies_to_wait[p].set()
+                if dep not in state["deps"]:
+                    state["deps"].append(dep)
+                    if dep in dependencies_to_wait.keys():
+                        dependencies_to_wait[dep].set()
             else:
-                await wait_dep(dependencies_to_wait, p)
+                if dep not in state["deps"]:
+                    await dependencies_to_wait.setdefault(dep, asyncio.Event()).wait()
         state["comps"][comp_num][1] = steps[i][1]
-    locks[comp_num].release()
+    pushb_locks[comp_num].release()
 
 
 async def main():
@@ -72,7 +71,9 @@ async def main():
     add_comp(client)
     await asyncio.gather(
         push_b(dependencies_to_wait, bhv_num=0, comp_num=0),
-        push_b(dependencies_to_wait, bhv_num=0, comp_num=1)
+        push_b(dependencies_to_wait, bhv_num=0, comp_num=1),
+        push_b(dependencies_to_wait, bhv_num=1, comp_num=0),
+        push_b(dependencies_to_wait, bhv_num=1, comp_num=1)
     )
 
 
